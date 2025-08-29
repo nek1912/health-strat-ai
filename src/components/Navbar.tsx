@@ -45,10 +45,17 @@ const Navbar = () => {
 
           {/* Desktop Auth Buttons */}
           <div className="hidden md:flex items-center space-x-4">
-            <Button variant="ghost" className="font-semibold">
+            <Button 
+              variant="ghost" 
+              className="font-semibold"
+              onClick={() => window.location.href = '/auth'}
+            >
               Login
             </Button>
-            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-2 font-semibold">
+            <Button 
+              className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-2 font-semibold"
+              onClick={() => window.location.href = '/auth'}
+            >
               Register
             </Button>
           </div>
@@ -76,10 +83,17 @@ const Navbar = () => {
                 </button>
               ))}
               <div className="pt-4 space-y-3">
-                <Button variant="ghost" className="w-full justify-center">
+                <Button 
+                  variant="ghost" 
+                  className="w-full justify-center"
+                  onClick={() => window.location.href = '/auth'}
+                >
                   Login
                 </Button>
-                <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
+                <Button 
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+                  onClick={() => window.location.href = '/auth'}
+                >
                   Register
                 </Button>
               </div>

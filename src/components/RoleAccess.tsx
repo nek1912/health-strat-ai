@@ -61,8 +61,8 @@ const RoleAccess = () => {
   ];
 
   const handleRoleAccess = (route: string) => {
-    // In a real app, this would navigate to the respective login page
-    console.log(`Navigating to ${route}`);
+    // Navigate to auth page
+    window.location.href = '/auth';
   };
 
   return (
