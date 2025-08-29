@@ -23,7 +23,7 @@ const RoleAccess = () => {
         'Treatment recommendations',
         'Real-time alerts & notifications'
       ],
-      route: '/doctor-login',
+      route: 'doctor',
       color: 'from-blue-600 to-blue-700',
       accent: 'text-blue-600',
       bgAccent: 'bg-blue-50'
@@ -38,7 +38,7 @@ const RoleAccess = () => {
         'Staff management tools',
         'Operational efficiency metrics'
       ],
-      route: '/admin-login',
+      route: 'admin',
       color: 'from-primary to-primary-dark',
       accent: 'text-primary',
       bgAccent: 'bg-primary/10'
@@ -53,7 +53,7 @@ const RoleAccess = () => {
         'Appointment scheduling',
         'Secure messaging with doctors'
       ],
-      route: '/patient-login',
+      route: 'patient',
       color: 'from-secondary to-secondary-light',
       accent: 'text-secondary',
       bgAccent: 'bg-secondary/10'
@@ -61,8 +61,8 @@ const RoleAccess = () => {
   ];
 
   const handleRoleAccess = (route: string) => {
-    // Navigate to auth page
-    window.location.href = '/auth';
+    // Navigate to auth with role preselected
+    window.location.href = `/auth?role=${route}`;
   };
 
   return (

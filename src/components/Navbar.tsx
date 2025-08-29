@@ -48,15 +48,15 @@ const Navbar = () => {
             <Button 
               variant="ghost" 
               className="font-semibold"
-              onClick={() => window.location.href = '/auth'}
+              onClick={() => window.location.href = '/auth?role=doctor'}
             >
-              Login
+              Doctor Login
             </Button>
             <Button 
               className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-2 font-semibold"
-              onClick={() => window.location.href = '/auth'}
+              onClick={() => window.location.href = '/auth?role=admin'}
             >
-              Register
+              Admin Login
             </Button>
           </div>
 
@@ -86,15 +86,15 @@ const Navbar = () => {
                 <Button 
                   variant="ghost" 
                   className="w-full justify-center"
-                  onClick={() => window.location.href = '/auth'}
+                  onClick={() => window.location.href = '/auth?role=doctor'}
                 >
-                  Login
+                  Doctor Login
                 </Button>
                 <Button 
                   className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
-                  onClick={() => window.location.href = '/auth'}
+                  onClick={() => window.location.href = '/auth?role=admin'}
                 >
-                  Register
+                  Admin Login
                 </Button>
               </div>
             </div>

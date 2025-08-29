@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -7,38 +7,111 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { Activity } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+
+const DEMO = { email: 'demo@healthai.com', password: 'demo123456' };
+
+type Role = 'doctor' | 'admin' | 'hospital' | 'patient';
+
+const roleToRoute: Record<Role, string> = {
+  doctor: '/doctor',
+  admin: '/admin',
+  hospital: '/admin',
+  patient: '/patient',
+};
 
 const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const [email, setEmail] = useState('demo@healthai.com');
-  const [password, setPassword] = useState('demo123456');
+  const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login');
+  const [email, setEmail] = useState(DEMO.email);
+  const [password, setPassword] = useState(DEMO.password);
+  const [role, setRole] = useState<Role>('doctor');
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+
+  // Preselect role from query, e.g. /auth?role=doctor
+  useEffect(() => {
+    const qRole = (searchParams.get('role') || '').toLowerCase();
+    if (qRole === 'doctor' || qRole === 'admin' || qRole === 'hospital' || qRole === 'patient') {
+      setRole(qRole as Role);
+    }
+  }, [searchParams]);
+
+  const navigateByRole = async () => {
+    const { data } = await supabase.auth.getUser();
+    const user = data.user;
+    const uRole = (user?.user_metadata?.role as Role) || 'doctor';
+    const target = roleToRoute[uRole] || '/dashboard';
+    navigate(target, { replace: true });
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) throw error;
-      
+
       toast({
         title: "Login successful!",
         description: "Welcome back to HealthAI.",
       });
-      // Navigate to doctor dashboard after successful login
-      navigate('/doctor', { replace: true });
+
+      await navigateByRole();
     } catch (error: any) {
       toast({
         title: "Login failed",
-        description: error.message,
+        description: error?.message || 'Unable to sign in.',
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDemoLogin = async () => {
+    if (email !== DEMO.email || password !== DEMO.password) {
+      setEmail(DEMO.email);
+      setPassword(DEMO.password);
+    }
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: DEMO.email,
+        password: DEMO.password,
+      });
+      if (error) throw error;
+      toast({ title: 'Logged in as Demo', description: 'Exploring demo dashboard.' });
+      await navigateByRole();
+    } catch (error: any) {
+      toast({
+        title: 'Demo login failed',
+        description: error?.message || 'Demo account not found. Please create it in Supabase Auth or enable it.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!email) return;
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email,
+        options: { emailRedirectTo: `${window.location.origin}/` },
+      });
+      if (error) throw error;
+      toast({ title: 'Verification sent', description: `Check ${email} for the confirmation link.` });
+    } catch (error: any) {
+      toast({ title: 'Could not send verification', description: error?.message || 'Please try again later.', variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
@@ -50,27 +123,28 @@ const Auth = () => {
 
     try {
       const redirectUrl = `${window.location.origin}/`;
-      
+
       const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: redirectUrl
-        }
+          emailRedirectTo: redirectUrl,
+          data: { role },
+        },
       });
 
       if (error) throw error;
-      
+
       toast({
         title: "Account created!",
         description: "Please check your email to verify your account.",
       });
-      // Stay on auth so user can switch to Login after verifying email
-      // Optionally, auto-navigate to login tab
+      // Switch to login tab so user can log in after verifying
+      setActiveTab('login');
     } catch (error: any) {
       toast({
         title: "Signup failed",
-        description: error.message,
+        description: error?.message || 'Unable to create account.',
         variant: "destructive",
       });
     } finally {
@@ -96,7 +170,7 @@ const Auth = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="login" className="w-full">
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'login' | 'signup')} className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="login">Login</TabsTrigger>
                 <TabsTrigger value="signup">Sign Up</TabsTrigger>
@@ -129,6 +203,19 @@ const Auth = () => {
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? 'Signing in...' : 'Sign In'}
                   </Button>
+                  <Button type="button" variant="outline" className="w-full" onClick={handleDemoLogin} disabled={isLoading}>
+                    {isLoading ? 'Please wait...' : 'Login with Demo Account'}
+                  </Button>
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={handleResendVerification}
+                      className="text-xs text-muted-foreground hover:underline"
+                      disabled={isLoading}
+                    >
+                      Resend verification email
+                    </button>
+                  </div>
                 </form>
               </TabsContent>
               
@@ -155,6 +242,20 @@ const Auth = () => {
                       required
                       minLength={6}
                     />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-role">Role</Label>
+                    <select
+                      id="signup-role"
+                      className="w-full border rounded-md p-2 bg-background"
+                      value={role}
+                      onChange={(e) => setRole(e.target.value as Role)}
+                    >
+                      <option value="doctor">Doctor</option>
+                      <option value="patient">Patient</option>
+                      <option value="admin">Hospital Admin</option>
+                    </select>
                   </div>
                   
                   <Button type="submit" className="w-full" disabled={isLoading}>
