@@ -11,6 +11,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const DEMO = { email: 'demo@healthai.com', password: 'demo123456' };
 
+// Optional: enable a local demo-auth bypass that doesn't hit Supabase
+const DEMO_MODE = (import.meta as any).env?.VITE_DEMO_MODE === 'true';
+
 type Role = 'doctor' | 'admin' | 'hospital' | 'patient';
 
 const roleToRoute: Record<Role, string> = {
@@ -45,11 +48,28 @@ const Auth = () => {
     navigate(target, { replace: true });
   };
 
+  // Helper for demo-bypass (does not require Supabase session)
+  const navigateDirectBySelectedRole = () => {
+    // Set a lightweight demo session so route guards allow access
+    localStorage.setItem('demo-auth', 'true');
+    localStorage.setItem('demo-email', DEMO.email);
+    localStorage.setItem('demo-role', role);
+    const target = roleToRoute[role] || '/dashboard';
+    navigate(target, { replace: true });
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
+      // Always bypass when using demo credentials (no Supabase needed)
+      if (email === DEMO.email && password === DEMO.password) {
+        toast({ title: 'Demo login (bypass)', description: 'Direct access with demo credentials.' });
+        navigateDirectBySelectedRole();
+        return;
+      }
+
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -64,6 +84,29 @@ const Auth = () => {
 
       await navigateByRole();
     } catch (error: any) {
+      // If email is not confirmed, auto-resend the verification email
+      const msg = String(error?.message || '').toLowerCase();
+      if (msg.includes('not confirmed') || msg.includes('confirm') || error?.status === 400) {
+        try {
+          await supabase.auth.resend({
+            type: 'signup',
+            email,
+            options: { emailRedirectTo: `${window.location.origin}/` },
+          });
+          toast({
+            title: 'Email not confirmed',
+            description: `We sent a new verification link to ${email}. Please confirm and try again.`,
+          });
+        } catch (resendErr: any) {
+          toast({
+            title: 'Login failed',
+            description: resendErr?.message || 'Email not confirmed. Please check your inbox.',
+            variant: 'destructive',
+          });
+        }
+        return;
+      }
+
       toast({
         title: "Login failed",
         description: error?.message || 'Unable to sign in.',
@@ -81,17 +124,13 @@ const Auth = () => {
     }
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: DEMO.email,
-        password: DEMO.password,
-      });
-      if (error) throw error;
-      toast({ title: 'Logged in as Demo', description: 'Exploring demo dashboard.' });
-      await navigateByRole();
+      // Always bypass Supabase for the Demo Account for instant access
+      toast({ title: 'Logged in as Demo (bypass)', description: 'Demo mode: direct navigation without Supabase.' });
+      navigateDirectBySelectedRole();
     } catch (error: any) {
       toast({
         title: 'Demo login failed',
-        description: error?.message || 'Demo account not found. Please create it in Supabase Auth or enable it.',
+        description: error?.message || 'Unexpected error during demo navigation.',
         variant: 'destructive',
       });
     } finally {
@@ -123,6 +162,13 @@ const Auth = () => {
 
     try {
       const redirectUrl = `${window.location.origin}/`;
+
+      // In demo mode, skip calling Supabase and just inform user
+      if (DEMO_MODE) {
+        toast({ title: 'Demo mode active', description: 'Sign up is disabled in demo mode. Use demo credentials.' });
+        setActiveTab('login');
+        return;
+      }
 
       const { error } = await supabase.auth.signUp({
         email,

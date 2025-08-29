@@ -16,14 +16,24 @@ import Index from "./pages/Index";
 
 const queryClient = new QueryClient();
 
+// Demo-bypass helpers (set by Auth.tsx when using demo login)
+const isDemo = () => typeof window !== 'undefined' && localStorage.getItem('demo-auth') === 'true';
+const getDemoRole = () => (typeof window !== 'undefined' && (localStorage.getItem('demo-role') || 'doctor')) as string;
+const getDemoEmail = () => (typeof window !== 'undefined' && (localStorage.getItem('demo-email') || 'demo@healthai.com')) as string;
+
 const ProtectedRoute = ({ user }: { user: User | null }) => {
-  if (!user) return <Navigate to="/auth" replace />;
+  if (!user && !isDemo()) return <Navigate to="/auth" replace />;
   return <Outlet />;
 };
 
 const RoleRoute = ({ user, allow }: { user: User | null; allow: Array<string> }) => {
-  if (!user) return <Navigate to="/auth" replace />;
-  const role = (user.user_metadata?.role as string) || "";
+  // If demo mode is on, always trust demo role (useful when auth user exists but lacks metadata)
+  const role = isDemo()
+    ? getDemoRole()
+    : (user ? ((user.user_metadata?.role as string) || '') : '');
+
+  // If not demo and no user, send to auth
+  if (!isDemo() && !user) return <Navigate to="/auth" replace />;
   if (!allow.includes(role)) return <Navigate to="/dashboard" replace />;
   return <Outlet />;
 };
@@ -74,7 +84,7 @@ const App = () => {
             {/* Authenticated area */}
             <Route element={<ProtectedRoute user={user} />}> 
               {/* General dashboard accessible to any authenticated user */}
-              <Route path="/dashboard" element={<Dashboard userEmail={user?.email || "user@healthai.local"} />} />
+              <Route path="/dashboard" element={<Dashboard userEmail={user?.email || getDemoEmail()} />} />
 
               {/* Role-based routes */}
               <Route element={<RoleRoute user={user} allow={["doctor"]} />}>

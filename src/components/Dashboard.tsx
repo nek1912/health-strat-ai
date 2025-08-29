@@ -15,6 +15,11 @@ const Dashboard = ({ userEmail }: DashboardProps) => {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       
+      // Clear demo-bypass session if present
+      localStorage.removeItem('demo-auth');
+      localStorage.removeItem('demo-email');
+      localStorage.removeItem('demo-role');
+      
       toast({
         title: "Logged out successfully",
         description: "See you next time!",

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   BarChart,
@@ -36,24 +36,28 @@ import {
   Sun,
   Search,
 } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { fnAnalytics, fnGetAssignedPatients, fnGetAppointments, fnTriggerPrediction, fnUpdateAppointment } from "@/integrations/supabase/functions";
+import { toast } from "@/components/ui/sonner";
 
-// Mock types
+// Backend-aligned shapes (minimal fields used by UI)
 type Risk = "low" | "medium" | "high";
-interface Patient {
+interface PatientRow {
   id: string;
-  name: string;
-  age: number;
-  condition: string;
-  risk: Risk;
-  lastVisit: string; // ISO
+  name?: string | null;
+  gender?: string | null;
+  blood_group?: string | null;
+  date_of_birth?: string | null;
+  last_visit_at?: string | null;
 }
 
-interface Appointment {
+interface AppointmentRow {
   id: string;
-  patientId: string;
-  patientName: string;
-  time: string; // ISO
-  status: "pending" | "confirmed";
+  patient_id: string;
+  doctor_id: string;
+  scheduled_at: string; // ISO
+  reason?: string | null;
+  status: string; // scheduled | completed | canceled
 }
 
 const RISK_COLORS: Record<Risk, string> = {
@@ -62,33 +66,8 @@ const RISK_COLORS: Record<Risk, string> = {
   high: "#dc2626",
 };
 
-const mockPatients: Patient[] = [
-  { id: "P001", name: "John Smith", age: 54, condition: "Hypertension", risk: "high", lastVisit: "2025-08-15" },
-  { id: "P002", name: "Sarah Johnson", age: 41, condition: "Diabetes", risk: "medium", lastVisit: "2025-08-20" },
-  { id: "P003", name: "Mike Wilson", age: 63, condition: "COPD", risk: "high", lastVisit: "2025-08-10" },
-  { id: "P004", name: "Emily Davis", age: 29, condition: "Asthma", risk: "low", lastVisit: "2025-08-22" },
-  { id: "P005", name: "Raj Patel", age: 47, condition: "Cardio Risk", risk: "medium", lastVisit: "2025-08-18" },
-];
-
-const mockAppointments: Appointment[] = [
-  { id: "A001", patientId: "P002", patientName: "Sarah Johnson", time: "2025-08-30T09:30:00", status: "pending" },
-  { id: "A002", patientId: "P004", patientName: "Emily Davis", time: "2025-08-30T11:00:00", status: "confirmed" },
-  { id: "A003", patientId: "P001", patientName: "John Smith", time: "2025-08-30T14:00:00", status: "pending" },
-];
-
 const mockAlerts = [
-  { id: "AL1", message: "John Smith at high cardiovascular risk", severity: "critical", createdAt: "2025-08-29T10:12:00" },
-  { id: "AL2", message: "Adjust medication for Mike Wilson", severity: "warning", createdAt: "2025-08-29T09:02:00" },
-  { id: "AL3", message: "Schedule follow-up for Sarah Johnson", severity: "info", createdAt: "2025-08-28T16:45:00" },
-];
-
-const navItems = [
-  { label: "Overview", icon: LayoutGrid, to: "/doctor" },
-  { label: "Patients", icon: Users, to: "/doctor" },
-  { label: "Risk Predictions", icon: HeartPulse, to: "/doctor" },
-  { label: "Reports", icon: ListChecks, to: "/doctor" },
-  { label: "Appointments", icon: CalendarDays, to: "/doctor" },
-  { label: "Settings", icon: Settings, to: "/doctor" },
+  { id: "AL1", message: "New prediction available", severity: "info", createdAt: new Date().toISOString() },
 ];
 
 const RiskPill: React.FC<{ risk: Risk }> = ({ risk }) => (
@@ -176,7 +155,14 @@ const Sidebar: React.FC<{ collapsed: boolean; setCollapsed: (v: boolean) => void
       </Button>
     </div>
     <nav className="px-2 space-y-1">
-      {navItems.map(({ label, icon: Icon, to }) => (
+      {[
+        { label: "Overview", icon: LayoutGrid, to: "/doctor" },
+        { label: "Patients", icon: Users, to: "/doctor" },
+        { label: "Risk Predictions", icon: HeartPulse, to: "/doctor" },
+        { label: "Reports", icon: ListChecks, to: "/doctor" },
+        { label: "Appointments", icon: CalendarDays, to: "/doctor" },
+        { label: "Settings", icon: Settings, to: "/doctor" },
+      ].map(({ label, icon: Icon, to }) => (
         <Link key={label} to={to} className={(active === label ? "bg-muted " : "") + "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted transition-colors"}>
           <Icon className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
           {!collapsed && <span>{label}</span>}
@@ -231,16 +217,12 @@ const StatsGrid: React.FC<{ stats: { totalPatients: number; highRisk: number; up
   </div>
 );
 
-const RiskChart: React.FC<{ data: Patient[] }> = ({ data }) => {
-  const distribution = useMemo(() => {
-    const counts = { low: 0, medium: 0, high: 0 } as Record<Risk, number>;
-    data.forEach((p) => (counts[p.risk] += 1));
-    return [
-      { name: "Low", value: counts.low, color: RISK_COLORS.low },
-      { name: "Medium", value: counts.medium, color: RISK_COLORS.medium },
-      { name: "High", value: counts.high, color: RISK_COLORS.high },
-    ];
-  }, [data]);
+const RiskChart: React.FC<{ distribution: { low: number; medium: number; high: number } }> = ({ distribution }) => {
+  const data = useMemo(() => ([
+    { name: "Low", value: distribution.low, color: RISK_COLORS.low },
+    { name: "Medium", value: distribution.medium, color: RISK_COLORS.medium },
+    { name: "High", value: distribution.high, color: RISK_COLORS.high },
+  ]), [distribution]);
 
   return (
     <Card>
@@ -252,8 +234,8 @@ const RiskChart: React.FC<{ data: Patient[] }> = ({ data }) => {
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={distribution} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90}>
-                {distribution.map((entry, index) => (
+              <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90}>
+                {data.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>
@@ -266,7 +248,7 @@ const RiskChart: React.FC<{ data: Patient[] }> = ({ data }) => {
   );
 };
 
-const PatientTable: React.FC<{ patients: Patient[]; onView: (p: Patient) => void; query: string; onQuery: (q: string) => void; riskFilter: Risk | "all"; onRisk: (r: Risk | "all") => void; }> = ({ patients, onView, query, onQuery, riskFilter, onRisk }) => (
+const PatientTable: React.FC<{ patients: PatientRow[]; onView: (p: PatientRow) => void; query: string; onQuery: (q: string) => void; riskFilter: Risk | "all"; onRisk: (r: Risk | "all") => void; onPredict: (p: PatientRow) => void; loading?: boolean; }> = ({ patients, onView, query, onQuery, riskFilter, onRisk, onPredict, loading }) => (
   <Card>
     <CardHeader>
       <CardTitle>Patients</CardTitle>
@@ -291,23 +273,28 @@ const PatientTable: React.FC<{ patients: Patient[]; onView: (p: Patient) => void
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>Age</TableHead>
-              <TableHead>Condition</TableHead>
-              <TableHead>Risk</TableHead>
+              <TableHead>Gender</TableHead>
+              <TableHead>Blood Group</TableHead>
               <TableHead>Last Visit</TableHead>
               <TableHead className="text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {patients.map((p) => (
+            {loading ? (
+              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+            ) : patients.length === 0 ? (
+              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No patients found</TableCell></TableRow>
+            ) : patients.map((p) => (
               <TableRow key={p.id}>
-                <TableCell className="font-medium">{p.name}</TableCell>
-                <TableCell>{p.age}</TableCell>
-                <TableCell>{p.condition}</TableCell>
-                <TableCell><RiskPill risk={p.risk} /></TableCell>
-                <TableCell>{new Date(p.lastVisit).toLocaleDateString()}</TableCell>
+                <TableCell className="font-medium">{p.name || p.id}</TableCell>
+                <TableCell>{p.gender || '-'}</TableCell>
+                <TableCell>{p.blood_group || '-'}</TableCell>
+                <TableCell>{p.last_visit_at ? new Date(p.last_visit_at).toLocaleDateString() : '-'}</TableCell>
                 <TableCell className="text-right">
-                  <Button size="sm" onClick={() => onView(p)}>View Details</Button>
+                  <div className="flex gap-2 justify-end">
+                    <Button size="sm" variant="outline" onClick={() => onView(p)}>View</Button>
+                    <Button size="sm" onClick={() => onPredict(p)}>Predict</Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -318,7 +305,7 @@ const PatientTable: React.FC<{ patients: Patient[]; onView: (p: Patient) => void
   </Card>
 );
 
-const PatientModal: React.FC<{ open: boolean; onOpenChange: (v: boolean) => void; patient?: Patient }> = ({ open, onOpenChange, patient }) => (
+const PatientModal: React.FC<{ open: boolean; onOpenChange: (v: boolean) => void; patient?: PatientRow }> = ({ open, onOpenChange, patient }) => (
   <Sheet open={open} onOpenChange={onOpenChange}>
     <SheetContent side="right" className="w-full sm:max-w-xl">
       <SheetHeader>
@@ -328,10 +315,9 @@ const PatientModal: React.FC<{ open: boolean; onOpenChange: (v: boolean) => void
         <div className="mt-4">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <p className="text-lg font-semibold">{patient.name}</p>
-              <p className="text-sm text-muted-foreground">ID {patient.id} • {patient.age} yrs</p>
+              <p className="text-lg font-semibold">{patient.name || patient.id}</p>
+              <p className="text-sm text-muted-foreground">ID {patient.id} • {patient.gender || '—'}</p>
             </div>
-            <RiskPill risk={patient.risk} />
           </div>
           <Tabs defaultValue="overview">
             <TabsList className="grid grid-cols-3 w-full">
@@ -345,8 +331,8 @@ const PatientModal: React.FC<{ open: boolean; onOpenChange: (v: boolean) => void
                   <CardTitle>Summary</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p>Primary condition: {patient.condition}</p>
-                  <p>Last visit: {new Date(patient.lastVisit).toLocaleString()}</p>
+                  <p>Blood group: {patient.blood_group || '—'}</p>
+                  <p>Last visit: {patient.last_visit_at ? new Date(patient.last_visit_at).toLocaleString() : '—'}</p>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -357,9 +343,7 @@ const PatientModal: React.FC<{ open: boolean; onOpenChange: (v: boolean) => void
                 </CardHeader>
                 <CardContent>
                   <ul className="list-disc pl-6 text-sm space-y-1">
-                    <li>BP checkup (3 months ago)</li>
-                    <li>Lab panel (2 months ago)</li>
-                    <li>Medication updated (1 month ago)</li>
+                    <li>History view can be wired to your existing endpoints.</li>
                   </ul>
                 </CardContent>
               </Card>
@@ -370,9 +354,7 @@ const PatientModal: React.FC<{ open: boolean; onOpenChange: (v: boolean) => void
                   <CardTitle>AI Recommendations</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
-                  <p>• Increase physical activity; monitor BP bi-weekly.</p>
-                  <p>• Consider medication adjustment if readings stay elevated.</p>
-                  <p>• Schedule follow-up in 2 weeks.</p>
+                  <p>Run prediction from table actions to fetch latest AI insight.</p>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -385,7 +367,7 @@ const PatientModal: React.FC<{ open: boolean; onOpenChange: (v: boolean) => void
   </Sheet>
 );
 
-const AppointmentsCard: React.FC<{ items: Appointment[]; onConfirm: (id: string) => void; onResched: (id: string) => void }> = ({ items, onConfirm, onResched }) => (
+const AppointmentsCard: React.FC<{ items: Array<{ id: string; patientName: string; time: string; status: string }>; onConfirm: (id: string) => void; onResched: (id: string) => void; loading?: boolean }> = ({ items, onConfirm, onResched, loading }) => (
   <Card>
     <CardHeader>
       <CardTitle>Upcoming Appointments</CardTitle>
@@ -393,14 +375,18 @@ const AppointmentsCard: React.FC<{ items: Appointment[]; onConfirm: (id: string)
     </CardHeader>
     <CardContent>
       <div className="space-y-3">
-        {items.map((a) => (
+        {loading ? (
+          <div className="text-sm text-muted-foreground">Loading...</div>
+        ) : items.length === 0 ? (
+          <div className="text-sm text-muted-foreground">No upcoming appointments</div>
+        ) : items.map((a) => (
           <div key={a.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
             <div>
               <p className="font-medium">{a.patientName}</p>
               <p className="text-xs text-muted-foreground">{new Date(a.time).toLocaleString()}</p>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant={a.status === "confirmed" ? "default" : "secondary"}>{a.status}</Badge>
+              <Badge variant={a.status === "completed" ? "default" : "secondary"}>{a.status}</Badge>
               <Button size="sm" variant="outline" onClick={() => onConfirm(a.id)}>Confirm</Button>
               <Button size="sm" onClick={() => onResched(a.id)}>Reschedule</Button>
             </div>
@@ -435,7 +421,7 @@ const AlertsPanel: React.FC = () => (
 
 const FooterBar: React.FC = () => (
   <footer className="mt-10 py-6 border-t text-xs text-muted-foreground flex items-center justify-between">
-    <span>© {new Date().getFullYear()} MediSense Hospital</span>
+    <span> 2025 MediSense Hospital</span>
     <div className="flex items-center gap-4">
       <a className="hover:underline" href="#">Privacy Policy</a>
       <a className="hover:underline" href="#">Contact</a>
@@ -447,40 +433,67 @@ const DoctorDashboard: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [search, setSearch] = useState("");
   const [risk, setRisk] = useState<Risk | "all">("all");
-  const [selected, setSelected] = useState<Patient | undefined>(undefined);
+  const [selected, setSelected] = useState<PatientRow | undefined>(undefined);
   const [modalOpen, setModalOpen] = useState(false);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return mockPatients.filter((p) => {
-      const matchesQ = !q || p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q) || p.condition.toLowerCase().includes(q);
-      const matchesR = risk === "all" || p.risk === risk;
-      return matchesQ && matchesR;
-    });
-  }, [search, risk]);
+  const queryClient = useQueryClient();
+
+  // Patients list
+  const { data: patientsResp, isLoading: patientsLoading, refetch: refetchPatients } = useQuery({
+    queryKey: ["assignedPatients", search],
+    queryFn: () => fnGetAssignedPatients({ search: search || undefined, limit: 50, offset: 0 })
+  });
+  const patients: PatientRow[] = (patientsResp?.data as PatientRow[]) || [];
+
+  // Analytics
+  const { data: analytics } = useQuery({
+    queryKey: ["analytics"],
+    queryFn: () => fnAnalytics({})
+  });
+
+  // Appointments
+  const { data: apptsResp, isLoading: apptsLoading, refetch: refetchAppts } = useQuery({
+    queryKey: ["appointments"],
+    queryFn: () => fnGetAppointments({ status: "scheduled", limit: 10, offset: 0 })
+  });
+  const apptItems: Array<{ id: string; patientName: string; time: string; status: string }> = ((apptsResp?.data as AppointmentRow[]) || []).map(a => ({
+    id: a.id,
+    patientName: a.patient_id, // could be joined in future
+    time: a.scheduled_at,
+    status: a.status,
+  }));
 
   const stats = {
-    totalPatients: mockPatients.length,
-    highRisk: mockPatients.filter((p) => p.risk === "high").length,
-    upcoming: mockAppointments.length,
+    totalPatients: analytics?.totals?.patients ?? patients.length,
+    highRisk: analytics?.risk_distribution?.high ?? 0,
+    upcoming: analytics?.totals?.appointments_pending ?? apptItems.length,
     notifications: mockAlerts.length,
   };
 
-  const handleView = (p: Patient) => {
+  const handleView = (p: PatientRow) => {
     setSelected(p);
     setModalOpen(true);
   };
 
-  const confirmAppt = (id: string) => {
-    // Optimistic toggle for mock
-    // In real app, call POST /appointments/:id/confirm
-    // eslint-disable-next-line no-console
-    console.log("confirm", id);
-  };
-  const reschedAppt = (id: string) => {
-    // eslint-disable-next-line no-console
-    console.log("resched", id);
-  };
+  const predictMutation = useMutation({
+    mutationFn: (patient_id: string) => fnTriggerPrediction(patient_id),
+    onSuccess: () => {
+      toast("Prediction triggered", { description: "Latest risk was requested from ML service." });
+      queryClient.invalidateQueries({ queryKey: ["analytics"] });
+    },
+    onError: (e: any) => toast("Prediction failed", { description: String(e?.message || e) })
+  });
+
+  const updateAppt = useMutation({
+    mutationFn: (vars: { id: string; status?: string }) => fnUpdateAppointment(vars),
+    onSuccess: () => { refetchAppts(); toast("Appointment updated"); },
+    onError: (e: any) => toast("Update failed", { description: String(e?.message || e) })
+  });
+
+  const confirmAppt = (id: string) => updateAppt.mutate({ id, status: "completed" });
+  const reschedAppt = (id: string) => updateAppt.mutate({ id, status: "scheduled" });
+
+  const onPredict = (p: PatientRow) => predictMutation.mutate(p.id);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -508,19 +521,25 @@ const DoctorDashboard: React.FC = () => {
           {/* Charts + Appointments */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
             <div className="lg:col-span-2">
-              <RiskChart data={mockPatients} />
+              <RiskChart distribution={{
+                low: analytics?.risk_distribution?.low ?? 0,
+                medium: analytics?.risk_distribution?.medium ?? 0,
+                high: analytics?.risk_distribution?.high ?? 0,
+              }} />
             </div>
-            <AppointmentsCard items={mockAppointments} onConfirm={confirmAppt} onResched={reschedAppt} />
+            <AppointmentsCard items={apptItems} onConfirm={confirmAppt} onResched={reschedAppt} loading={apptsLoading} />
           </div>
 
           {/* Patients + Alerts */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
             <div className="lg:col-span-2">
               <PatientTable
-                patients={filtered}
+                patients={patients}
                 onView={handleView}
+                onPredict={onPredict}
+                loading={patientsLoading}
                 query={search}
-                onQuery={setSearch}
+                onQuery={(q) => { setSearch(q); refetchPatients(); }}
                 riskFilter={risk}
                 onRisk={setRisk}
               />
