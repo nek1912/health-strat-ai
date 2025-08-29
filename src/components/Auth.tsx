@@ -7,18 +7,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { Activity } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState('demo@healthai.com');
   const [password, setPassword] = useState('demo123456');
+  const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -29,6 +31,8 @@ const Auth = () => {
         title: "Login successful!",
         description: "Welcome back to HealthAI.",
       });
+      // Navigate to doctor dashboard after successful login
+      navigate('/doctor', { replace: true });
     } catch (error: any) {
       toast({
         title: "Login failed",
@@ -61,6 +65,8 @@ const Auth = () => {
         title: "Account created!",
         description: "Please check your email to verify your account.",
       });
+      // Stay on auth so user can switch to Login after verifying email
+      // Optionally, auto-navigate to login tab
     } catch (error: any) {
       toast({
         title: "Signup failed",

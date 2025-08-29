@@ -2,14 +2,16 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
-import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Auth from "./components/Auth";
 import Dashboard from "./components/Dashboard";
+import DoctorDashboard from "./pages/DoctorDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
+import Index from "./pages/Index";
 
 const queryClient = new QueryClient();
 
@@ -56,10 +58,31 @@ const App = () => {
         <Sonner />
         <BrowserRouter>
           <Routes>
+            {/* Home always shows Auth */}
             <Route path="/" element={user ? <Dashboard userEmail={user.email || ''} /> : <Index />} />
+
+            {/* Auth route */}
             <Route path="/auth" element={<Auth />} />
-            <Route path="/dashboard" element={user ? <Dashboard userEmail={user.email || ''} /> : <Auth />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+
+            {/* Protected routes (require auth) */}
+            <Route
+              path="/admin"
+              element={user ? <AdminDashboard /> : <Navigate to="/auth" replace />}
+            />
+            <Route
+              path="/dashboard"
+              element={user ? (
+                <Dashboard userEmail={user.email || 'user@hospital.local'} />
+              ) : (
+                <Navigate to="/auth" replace />
+              )}
+            />
+            <Route
+              path="/doctor"
+              element={user ? <DoctorDashboard /> : <Navigate to="/auth" replace />}
+            />
+
+            {/* Catch-all */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
