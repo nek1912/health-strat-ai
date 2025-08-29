@@ -28,8 +28,9 @@ const Auth = () => {
   const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState(DEMO.email);
   const [password, setPassword] = useState(DEMO.password);
-  const [role, setRole] = useState<Role>('doctor');
   const [searchParams] = useSearchParams();
+  const initialRole = (searchParams.get('role') as Role) || 'doctor';
+  const [role, setRole] = useState<Role>(initialRole);
   const navigate = useNavigate();
 
   // Preselect role from query, e.g. /auth?role=doctor
@@ -44,8 +45,17 @@ const Auth = () => {
     const { data } = await supabase.auth.getUser();
     const user = data.user;
     const uRole = (user?.user_metadata?.role as Role) || 'doctor';
-    const target = roleToRoute[uRole] || '/dashboard';
+    const target = roleToRoute[uRole] || '/';
     navigate(target, { replace: true });
+  };
+
+  const navigateToNextOr = (fallback: string) => {
+    const next = searchParams.get('next');
+    if (next && next.startsWith('/')) {
+      navigate(next, { replace: true });
+    } else {
+      navigate(fallback, { replace: true });
+    }
   };
 
   // Helper for demo-bypass (does not require Supabase session)
@@ -54,7 +64,7 @@ const Auth = () => {
     localStorage.setItem('demo-auth', 'true');
     localStorage.setItem('demo-email', DEMO.email);
     localStorage.setItem('demo-role', role);
-    const target = roleToRoute[role] || '/dashboard';
+    const target = roleToRoute[role] || '/';
     navigate(target, { replace: true });
   };
 
@@ -66,7 +76,13 @@ const Auth = () => {
       // Always bypass when using demo credentials (no Supabase needed)
       if (email === DEMO.email && password === DEMO.password) {
         toast({ title: 'Demo login (bypass)', description: 'Direct access with demo credentials.' });
-        navigateDirectBySelectedRole();
+        // Set demo session so RoleRoute permits protected routes
+        localStorage.setItem('demo-auth', 'true');
+        localStorage.setItem('demo-email', DEMO.email);
+        localStorage.setItem('demo-role', role);
+        // Prefer `next` query param for destination
+        const target = roleToRoute[role] || '/';
+        navigateToNextOr(target);
         return;
       }
 
@@ -82,7 +98,12 @@ const Auth = () => {
         description: "Welcome back to HealthAI.",
       });
 
-      await navigateByRole();
+      // After real login, prefer `next` if present; else by role
+      const { data } = await supabase.auth.getUser();
+      const user = data.user;
+      const uRole = (user?.user_metadata?.role as Role) || role;
+      const fallback = roleToRoute[uRole] || '/';
+      navigateToNextOr(fallback);
     } catch (error: any) {
       // If email is not confirmed, auto-resend the verification email
       const msg = String(error?.message || '').toLowerCase();
@@ -126,7 +147,12 @@ const Auth = () => {
     try {
       // Always bypass Supabase for the Demo Account for instant access
       toast({ title: 'Logged in as Demo (bypass)', description: 'Demo mode: direct navigation without Supabase.' });
-      navigateDirectBySelectedRole();
+      // Set demo session so RoleRoute permits protected routes
+      localStorage.setItem('demo-auth', 'true');
+      localStorage.setItem('demo-email', DEMO.email);
+      localStorage.setItem('demo-role', role);
+      const target = roleToRoute[role] || '/';
+      navigateToNextOr(target);
     } catch (error: any) {
       toast({
         title: 'Demo login failed',

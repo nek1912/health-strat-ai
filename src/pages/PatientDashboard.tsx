@@ -15,7 +15,7 @@ import {
   CartesianGrid,
   Tooltip as RechartsTooltip,
 } from "recharts";
-import { Activity, Bell, ChevronLeft, ChevronRight, HeartPulse, MessageSquareText, CalendarDays, FileDown, Stethoscope, Pill, Search } from "lucide-react";
+import { Activity, Bell, ChevronLeft, ChevronRight, HeartPulse, MessageSquareText, CalendarDays, FileDown, Stethoscope, Search } from "lucide-react";
 
 // Mock patient and data
 const patientName = "John Doe";
@@ -54,10 +54,11 @@ const messages = [
   { id: "M-2", from: "Dr. Lee", preview: "Your last A1C looks improved.", time: "1d ago", unread: false },
 ];
 
-const history = [
-  { date: "2025-07-21", type: "Consultation", notes: "Cardiology follow-up", file: true },
-  { date: "2025-05-13", type: "Lab", notes: "HbA1c 6.4%", file: true },
-  { date: "2025-03-01", type: "Imaging", notes: "Chest X-ray normal", file: false },
+type HistoryItem = { date: string; type: string; notes: string; file: boolean; price: number };
+const history: HistoryItem[] = [
+  { date: "2025-07-21", type: "Consultation", notes: "Cardiology follow-up", file: true, price: 1200 },
+  { date: "2025-05-13", type: "Lab", notes: "HbA1c 6.4%", file: true, price: 850 },
+  { date: "2025-03-01", type: "Imaging", notes: "Chest X-ray normal", file: false, price: 1500 },
 ];
 
 const PatientNavbar: React.FC<{ notifications: number }> = ({ notifications }) => (
@@ -116,7 +117,6 @@ const Sidebar: React.FC<{ collapsed: boolean; setCollapsed: (v: boolean) => void
         { label: 'AI Recommendations', icon: Stethoscope, href: '#recommendations' },
         { label: 'Messages', icon: MessageSquareText, href: '#messages' },
         { label: 'Billing & Reports', icon: FileDown, href: '#billing' },
-        { label: 'Settings', icon: Pill, href: '#settings' },
       ].map(({ label, icon: Icon, href }) => (
         <a key={label} href={href} className={'group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted transition-colors'}>
           <Icon className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
@@ -192,38 +192,108 @@ const HealthChart: React.FC = () => (
   </section>
 );
 
-const Appointments: React.FC = () => (
-  <section id="appointments" className="space-y-4">
-    <div className="flex items-center justify-between">
-      <h3 className="text-lg font-semibold">Appointments</h3>
-      <Button className="bg-teal-600 hover:bg-teal-700">Book Appointment</Button>
-    </div>
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <Card>
-        <CardHeader><CardTitle>Upcoming</CardTitle></CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          {upcoming.map(a => (
-            <div key={a.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-              <span>{a.when} • {a.with} ({a.dept})</span>
-              <Badge>{a.status}</Badge>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader><CardTitle>Past</CardTitle></CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          {past.map(a => (
-            <div key={a.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-              <span>{a.when} • {a.with} ({a.dept})</span>
-              <Badge variant="secondary">Completed</Badge>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-    </div>
-  </section>
-);
+const Appointments: React.FC = () => {
+  type UpcomingAppt = { id: string; when: string; with: string; dept: string; status: string };
+  const [open, setOpen] = useState(false);
+  const [upcomingList, setUpcomingList] = useState<UpcomingAppt[]>(upcoming as UpcomingAppt[]);
+  const hospitalDoctors = [
+    { id: 'd-alice', name: 'Dr. Alice Carter', dept: 'Cardiology' },
+    { id: 'd-lee', name: 'Dr. Brian Lee', dept: 'Endocrinology' },
+    { id: 'd-chen', name: 'Dr. Chen Wu', dept: 'Pulmonology' },
+  ];
+  const [form, setForm] = useState<{ when: string; doctorId: string }>({ when: '', doctorId: '' });
+  const selectedDoctor = hospitalDoctors.find(d => d.id === form.doctorId);
+
+  const formatWhen = (v: string) => {
+    if (!v) return '';
+    // v is yyyy-mm-ddThh:mm
+    return v.replace('T', ' ');
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.when || !selectedDoctor) return;
+    const newAppt: UpcomingAppt = {
+      id: `A-${Date.now()}`,
+      when: formatWhen(form.when),
+      with: selectedDoctor.name,
+      dept: selectedDoctor.dept,
+      status: 'Pending',
+    };
+    setUpcomingList((prev) => [...prev, newAppt]);
+    setOpen(false);
+    setForm({ when: '', doctorId: '' });
+  };
+
+  return (
+    <section id="appointments" className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold">Appointments</h3>
+        <Sheet open={open} onOpenChange={setOpen}>
+          <SheetTrigger asChild>
+            <Button className="bg-teal-600 hover:bg-teal-700">Book Appointment</Button>
+          </SheetTrigger>
+          <SheetContent>
+            <SheetHeader>
+              <SheetTitle>Book Appointment</SheetTitle>
+            </SheetHeader>
+            <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Date & Time</label>
+                <Input type="datetime-local" value={form.when} onChange={(e) => setForm({ ...form, when: e.target.value })} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Doctor (Hospital)</label>
+                <select
+                  className="w-full h-10 rounded-md border bg-background px-3 text-sm"
+                  value={form.doctorId}
+                  onChange={(e) => setForm({ ...form, doctorId: e.target.value })}
+                >
+                  <option value="">Select a doctor</option>
+                  {hospitalDoctors.map(d => (
+                    <option key={d.id} value={d.id}>{d.name} • {d.dept}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Department</label>
+                <Input value={selectedDoctor?.dept || ''} readOnly placeholder="Department" />
+              </div>
+              <div className="pt-2 flex gap-2">
+                <Button type="submit" className="bg-teal-600 hover:bg-teal-700">Add Appointment</Button>
+                <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              </div>
+            </form>
+          </SheetContent>
+        </Sheet>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader><CardTitle>Upcoming</CardTitle></CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {upcomingList.map(a => (
+              <div key={a.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                <span>{a.when} • {a.with} ({a.dept})</span>
+                <Badge>{a.status}</Badge>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Past</CardTitle></CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {past.map(a => (
+              <div key={a.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                <span>{a.when} • {a.with} ({a.dept})</span>
+                <Badge variant="secondary">Completed</Badge>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+    </section>
+  );
+};
 
 const MessagesPanel: React.FC = () => (
   <section id="messages" className="space-y-4">
@@ -247,40 +317,118 @@ const MessagesPanel: React.FC = () => (
   </section>
 );
 
-const HistoryTable: React.FC = () => (
-  <section id="records" className="space-y-4">
-    <div className="flex items-center justify-between">
-      <h3 className="text-lg font-semibold">Medical History</h3>
-      <Button variant="outline" className="gap-2"><FileDown className="h-4 w-4" /> Download PDF</Button>
-    </div>
-    <div className="rounded-md border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Notes</TableHead>
-            <TableHead className="text-right">Attachment</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {history.map(r => (
-            <TableRow key={r.date+r.type}>
-              <TableCell className="font-medium">{r.date}</TableCell>
-              <TableCell>{r.type}</TableCell>
-              <TableCell>{r.notes}</TableCell>
-              <TableCell className="text-right">{r.file ? <Button size="sm" variant="outline">View</Button> : <span className="text-xs text-muted-foreground">—</span>}</TableCell>
+const HistoryTable: React.FC = () => {
+  const formatCurrency = (n: number) => new Intl.NumberFormat(undefined, { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n);
+  const handleDownloadPDF = () => {
+    // Print-friendly HTML of the medical history with prices (uses hidden iframe)
+    const rows = history.map(h => `<tr>
+      <td style="padding:8px;border-bottom:1px solid #e5e7eb;">${h.date}</td>
+      <td style="padding:8px;border-bottom:1px solid #e5e7eb;">${h.type}</td>
+      <td style="padding:8px;border-bottom:1px solid #e5e7eb;">${h.notes}</td>
+      <td style=\"padding:8px;border-bottom:1px solid #e5e7eb;text-align:right;\">${formatCurrency(h.price)}</td>
+    </tr>`).join('');
+    const html = `<!doctype html><html><head><meta charset="utf-8" />
+      <title>Medical History</title>
+      <style>
+        @page { size: A4; margin: 16mm; }
+        @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+        body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue","Noto Sans","Liberation Sans",Arial,"Apple Color Emoji","Segoe UI Emoji";padding:0;color:#111827}
+        h1{font-size:20px;margin:0 0 16px}
+        table{width:100%;border-collapse:collapse}
+        th{font-size:12px;text-align:left;color:#6b7280;padding:8px;border-bottom:1px solid #e5e7eb}
+        td{font-size:12px}
+        .container{padding:24px}
+      </style>
+    </head><body>
+      <div class="container">
+        <h1>Medical History</h1>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Notes</th>
+              <th style="text-align:right">Price</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <script>setTimeout(() => window.print(), 200);</script>
+    </body></html>`;
+
+    try {
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      document.body.appendChild(iframe);
+      const doc = iframe.contentWindow?.document;
+      if (doc) {
+        doc.open();
+        doc.write(html);
+        doc.close();
+        // Extra safety: trigger print after load
+        iframe.onload = () => {
+          setTimeout(() => iframe.contentWindow?.print(), 150);
+        };
+        // Cleanup after some time
+        setTimeout(() => document.body.removeChild(iframe), 5000);
+      } else {
+        throw new Error('Unable to access iframe document');
+      }
+    } catch (e) {
+      // Fallback: download HTML file the user can print to PDF
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'medical-history.html';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  return (
+    <section id="records" className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold">Medical History</h3>
+        <Button variant="outline" className="gap-2" onClick={handleDownloadPDF}><FileDown className="h-4 w-4" /> Download PDF</Button>
+      </div>
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Notes</TableHead>
+              <TableHead className="text-right">Price</TableHead>
+              <TableHead className="text-right">Attachment</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  </section>
-);
+          </TableHeader>
+          <TableBody>
+            {history.map(r => (
+              <TableRow key={r.date+r.type}>
+                <TableCell className="font-medium">{r.date}</TableCell>
+                <TableCell>{r.type}</TableCell>
+                <TableCell>{r.notes}</TableCell>
+                <TableCell className="text-right">{formatCurrency(r.price)}</TableCell>
+                <TableCell className="text-right">{r.file ? <Button size="sm" variant="outline">View</Button> : <span className="text-xs text-muted-foreground">—</span>}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </section>
+  );
+};
 
 const FooterBar: React.FC = () => (
   <footer className="mt-10 py-6 border-t text-xs text-muted-foreground flex items-center justify-between">
-    <span>© {new Date().getFullYear()} MediSense Hospital</span>
+    <span> {new Date().getFullYear()} MediSense Hospital</span>
     <div className="flex items-center gap-4">
       <a className="hover:underline" href="#">Support</a>
       <a className="hover:underline" href="#">Contact</a>

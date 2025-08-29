@@ -53,6 +53,13 @@ const Navbar = () => {
               Doctor Login
             </Button>
             <Button 
+              variant="outline"
+              className="px-6 py-2 font-semibold"
+              onClick={() => window.location.href = '/auth?role=patient'}
+            >
+              Patient Login
+            </Button>
+            <Button 
               className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-2 font-semibold"
               onClick={() => window.location.href = '/auth?role=admin'}
             >
@@ -89,6 +96,13 @@ const Navbar = () => {
                   onClick={() => window.location.href = '/auth?role=doctor'}
                 >
                   Doctor Login
+                </Button>
+                <Button 
+                  variant="outline"
+                  className="w-full justify-center"
+                  onClick={() => window.location.href = '/auth?role=patient'}
+                >
+                  Patient Login
                 </Button>
                 <Button 
                   className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"

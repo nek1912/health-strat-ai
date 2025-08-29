@@ -8,7 +8,6 @@ import { supabase } from "@/integrations/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
 import NotFound from "./pages/NotFound";
 import Auth from "./components/Auth";
-import Dashboard from "./components/Dashboard";
 import DoctorDashboard from "./pages/DoctorDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import PatientDashboard from "./pages/PatientDashboard";
@@ -34,7 +33,7 @@ const RoleRoute = ({ user, allow }: { user: User | null; allow: Array<string> })
 
   // If not demo and no user, send to auth
   if (!isDemo() && !user) return <Navigate to="/auth" replace />;
-  if (!allow.includes(role)) return <Navigate to="/dashboard" replace />;
+  if (!allow.includes(role)) return <Navigate to="/" replace />;
   return <Outlet />;
 };
 
@@ -83,15 +82,13 @@ const App = () => {
 
             {/* Authenticated area */}
             <Route element={<ProtectedRoute user={user} />}> 
-              {/* General dashboard accessible to any authenticated user */}
-              <Route path="/dashboard" element={<Dashboard userEmail={user?.email || getDemoEmail()} />} />
-
               {/* Role-based routes */}
-              <Route element={<RoleRoute user={user} allow={["doctor"]} />}>
+              <Route element={<RoleRoute user={user} allow={["doctor","admin"]} />}>
                 <Route path="/doctor" element={<DoctorDashboard />} />
               </Route>
               <Route element={<RoleRoute user={user} allow={["admin","hospital"]} />}>
                 <Route path="/admin" element={<AdminDashboard />} />
+                <Route path="/admin/overview" element={<AdminDashboard />} />
               </Route>
               <Route element={<RoleRoute user={user} allow={["patient"]} />}>
                 <Route path="/patient" element={<PatientDashboard />} />

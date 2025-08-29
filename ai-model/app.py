@@ -30,6 +30,21 @@ class PatientData(BaseModel):
     Creatinine: float
     Urea: float
 
+# Supabase getPrediction payload shape
+class MetricRow(BaseModel):
+    metric_date: str | None = None
+    Age: float | None = None
+    Sodium: float | None = None
+    Creatinine: float | None = None
+    Urea: float | None = None
+    # allow extra keys without validation errors
+    class Config:
+        extra = "allow"
+
+class SupabasePredictPayload(BaseModel):
+    patient_id: str
+    metrics: list[MetricRow] = []
+
 # ---------------- Helper: Explain with SHAP ----------------
 def get_shap_explanation(pipe, features, problem="Readmission"):
     model = pipe.named_steps["clf"]
@@ -73,8 +88,32 @@ def get_shap_explanation(pipe, features, problem="Readmission"):
 
 # ---------------- Routes ----------------
 @app.post("/predict")
-def predict(patient: PatientData):
-    features = [patient.Age, patient.Sodium, patient.Creatinine, patient.Urea]
+def predict(payload: dict):
+    # Accept either direct PatientData or SupabasePredictPayload
+    features: list[float]
+    patient_id: str | None = None
+    try:
+        # Try PatientData
+        pd = PatientData(**payload)
+        features = [pd.Age, pd.Sodium, pd.Creatinine, pd.Urea]
+    except Exception:
+        # Try Supabase payload
+        sb = SupabasePredictPayload(**payload)
+        patient_id = sb.patient_id
+        # pick the latest metric row (request sorted desc, but fallback to first)
+        latest = sb.metrics[0] if sb.metrics else MetricRow()
+        # fallback: compute simple means if fields missing
+        def val(name: str) -> float:
+            v = getattr(latest, name, None)
+            if v is None:
+                # Search in other metric rows for first non-null
+                for m in sb.metrics:
+                    mv = getattr(m, name, None)
+                    if mv is not None:
+                        return float(mv)
+                return 0.0
+            return float(v)
+        features = [val("Age"), val("Sodium"), val("Creatinine"), val("Urea")]
 
     # Readmission Prediction
     read_pred = pipe_read.predict([features])[0]
@@ -86,18 +125,62 @@ def predict(patient: PatientData):
     sev_proba = pipe_sev.predict_proba([features])[0].tolist()
     sev_expl, _ = get_shap_explanation(pipe_sev, features, "Severity")
 
+    # ML service compatible fields for Supabase function
+    # risk_score: use probability of positive readmission class (assume class 1)
+    try:
+        # If classes not [0,1], map by index of class '1'
+        classes = getattr(pipe_read.named_steps["clf"], "classes_", [0,1])
+        idx1 = list(classes).index(1) if 1 in list(classes) else int(np.argmax(read_proba))
+        risk_score = float(read_proba[idx1])
+    except Exception:
+        risk_score = float(read_proba[-1])
+
+    explanation = {
+        "readmission": {
+            "prediction": int(read_pred),
+            "probabilities": read_proba,
+            "top_features": read_expl,
+        },
+        "severity": {
+            "prediction": str(sev_pred),
+            "probabilities": sev_proba,
+            "top_features": sev_expl,
+        },
+        "features_used": {
+            "Age": features[0],
+            "Sodium": features[1],
+            "Creatinine": features[2],
+            "Urea": features[3],
+        },
+        **({"patient_id": patient_id} if patient_id else {}),
+    }
+
+    # Simple conditions list based on top drivers signs
+    high_risk_conditions = [
+        feat.split(" ")[0] for feat in read_expl if "increases" in feat
+    ][:2]
+
     return {
+        "risk_score": risk_score,
+        "high_risk_conditions": high_risk_conditions,
+        "explanation": explanation,
+        # keep original detailed blocks for UI usage
         "Readmission": {
             "Prediction": int(read_pred),
             "Probabilities": read_proba,
-            "Top_Features": read_expl
+            "Top_Features": read_expl,
         },
         "Severity": {
-            "Prediction": sev_pred,
+            "Prediction": str(sev_pred),
             "Probabilities": sev_proba,
-            "Top_Features": sev_expl
-        }
+            "Top_Features": sev_expl,
+        },
     }
+
 @app.get("/")
 def read_root():
     return {"message": "Health AI API is running! Go to /docs for testing."}
+
+@app.get("/health")
+def health():
+    return {"ok": True}

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   BarChart,
@@ -14,10 +14,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Activity,
   Bell,
@@ -49,6 +52,7 @@ interface PatientRow {
   blood_group?: string | null;
   date_of_birth?: string | null;
   last_visit_at?: string | null;
+  risk?: Risk | null;
 }
 
 interface AppointmentRow {
@@ -147,7 +151,7 @@ const NavbarBar: React.FC<{ onSearch: (q: string) => void; notifications: number
   </div>
 );
 
-const Sidebar: React.FC<{ collapsed: boolean; setCollapsed: (v: boolean) => void; active: string }> = ({ collapsed, setCollapsed, active }) => (
+const Sidebar: React.FC<{ collapsed: boolean; setCollapsed: (v: boolean) => void; activeId: string; onNavigate: (id: string) => void }> = ({ collapsed, setCollapsed, activeId, onNavigate }) => (
   <aside className={(collapsed ? "w-16 " : "w-64 ") + "transition-all duration-200 border-r bg-background h-[calc(100vh-4rem)] sticky top-16"}>
     <div className="p-2 flex items-center justify-between">
       <Button variant="ghost" size="icon" aria-label="Toggle sidebar" onClick={() => setCollapsed(!collapsed)}>
@@ -156,17 +160,16 @@ const Sidebar: React.FC<{ collapsed: boolean; setCollapsed: (v: boolean) => void
     </div>
     <nav className="px-2 space-y-1">
       {[
-        { label: "Overview", icon: LayoutGrid, to: "/doctor" },
-        { label: "Patients", icon: Users, to: "/doctor" },
-        { label: "Risk Predictions", icon: HeartPulse, to: "/doctor" },
-        { label: "Reports", icon: ListChecks, to: "/doctor" },
-        { label: "Appointments", icon: CalendarDays, to: "/doctor" },
-        { label: "Settings", icon: Settings, to: "/doctor" },
-      ].map(({ label, icon: Icon, to }) => (
-        <Link key={label} to={to} className={(active === label ? "bg-muted " : "") + "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted transition-colors"}>
+        { label: "Overview", icon: LayoutGrid, id: "overview" },
+        { label: "Patients", icon: Users, id: "patients" },
+        { label: "Risk Predictions", icon: HeartPulse, id: "risk" },
+        { label: "Reports", icon: ListChecks, id: "reports" },
+        { label: "Appointments", icon: CalendarDays, id: "appointments" },
+      ].map(({ label, icon: Icon, id }) => (
+        <button key={label} onClick={() => onNavigate(id)} className={(activeId === id ? "bg-muted " : "") + "w-full text-left group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium hover:bg-muted transition-colors"}>
           <Icon className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
           {!collapsed && <span>{label}</span>}
-        </Link>
+        </button>
       ))}
     </nav>
   </aside>
@@ -248,64 +251,75 @@ const RiskChart: React.FC<{ distribution: { low: number; medium: number; high: n
   );
 };
 
-const PatientTable: React.FC<{ patients: PatientRow[]; onView: (p: PatientRow) => void; query: string; onQuery: (q: string) => void; riskFilter: Risk | "all"; onRisk: (r: Risk | "all") => void; onPredict: (p: PatientRow) => void; loading?: boolean; }> = ({ patients, onView, query, onQuery, riskFilter, onRisk, onPredict, loading }) => (
-  <Card>
-    <CardHeader>
-      <CardTitle>Patients</CardTitle>
-      <CardDescription>Paginated, searchable list of patients</CardDescription>
-    </CardHeader>
-    <CardContent>
-      <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between mb-4">
-        <div className="relative md:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input value={query} onChange={(e) => onQuery(e.target.value)} placeholder="Search by name, ID, or condition" className="pl-9" />
-        </div>
-        <div className="flex items-center gap-2">
-          {["all", "low", "medium", "high"].map((r) => (
-            <Button key={r} variant={riskFilter === r ? "default" : "outline"} size="sm" onClick={() => onRisk(r as any)}>
-              {r === "all" ? "All" : (r as string).toUpperCase()}
-            </Button>
-          ))}
-        </div>
-      </div>
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Gender</TableHead>
-              <TableHead>Blood Group</TableHead>
-              <TableHead>Last Visit</TableHead>
-              <TableHead className="text-right">Action</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
-            ) : patients.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No patients found</TableCell></TableRow>
-            ) : patients.map((p) => (
-              <TableRow key={p.id}>
-                <TableCell className="font-medium">{p.name || p.id}</TableCell>
-                <TableCell>{p.gender || '-'}</TableCell>
-                <TableCell>{p.blood_group || '-'}</TableCell>
-                <TableCell>{p.last_visit_at ? new Date(p.last_visit_at).toLocaleDateString() : '-'}</TableCell>
-                <TableCell className="text-right">
-                  <div className="flex gap-2 justify-end">
-                    <Button size="sm" variant="outline" onClick={() => onView(p)}>View</Button>
-                    <Button size="sm" onClick={() => onPredict(p)}>Predict</Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </CardContent>
-  </Card>
-);
+const PatientTable: React.FC<{ patients: PatientRow[]; onView: (p: PatientRow) => void; query: string; onQuery: (q: string) => void; riskFilter: Risk | "all"; onRisk: (r: Risk | "all") => void; onPredict: (p: PatientRow) => void; loading?: boolean; }> = ({ patients, onView, query, onQuery, riskFilter, onRisk, onPredict, loading }) => {
+  const visible = patients.filter((p) => {
+    const q = (query || "").toLowerCase();
+    const matchesQuery = !q || [p.name || "", p.id || "", p.blood_group || ""].some(v => v.toLowerCase().includes(q));
+    const matchesRisk = riskFilter === "all" || (p.risk || "low") === riskFilter;
+    return matchesQuery && matchesRisk;
+  });
 
-const PatientModal: React.FC<{ open: boolean; onOpenChange: (v: boolean) => void; patient?: PatientRow }> = ({ open, onOpenChange, patient }) => (
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Patients</CardTitle>
+        <CardDescription>Paginated, searchable list of patients</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between mb-4">
+          <div className="relative md:w-80">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input value={query} onChange={(e) => onQuery(e.target.value)} placeholder="Search by name, ID, or condition" className="pl-9" />
+          </div>
+          <div className="flex items-center gap-2">
+            {["all", "low", "medium", "high"].map((r) => (
+              <Button key={r} variant={riskFilter === r ? "default" : "outline"} size="sm" onClick={() => onRisk(r as any)}>
+                {r === "all" ? "All" : (r as string).toUpperCase()}
+              </Button>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Gender</TableHead>
+                <TableHead>Blood Group</TableHead>
+                <TableHead>Last Visit</TableHead>
+                <TableHead>Risk</TableHead>
+                <TableHead className="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+              ) : visible.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No patients found</TableCell></TableRow>
+              ) : visible.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell className="font-medium">{p.name || p.id}</TableCell>
+                  <TableCell>{p.gender || '-'}</TableCell>
+                  <TableCell>{p.blood_group || '-'}</TableCell>
+                  <TableCell>{p.last_visit_at ? new Date(p.last_visit_at).toLocaleDateString() : '-'}</TableCell>
+                  <TableCell>{p.risk ? <RiskPill risk={p.risk as Risk} /> : '-'}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex gap-2 justify-end">
+                      <Button size="sm" variant="outline" onClick={() => onView(p)}>View</Button>
+                      <Button size="sm" onClick={() => onPredict(p)}>Predict</Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+const PatientModal: React.FC<{ open: boolean; onOpenChange: (v: boolean) => void; patient?: PatientRow; lastPred?: any }> = ({ open, onOpenChange, patient, lastPred }) => (
   <Sheet open={open} onOpenChange={onOpenChange}>
     <SheetContent side="right" className="w-full sm:max-w-xl">
       <SheetHeader>
@@ -353,8 +367,39 @@ const PatientModal: React.FC<{ open: boolean; onOpenChange: (v: boolean) => void
                 <CardHeader>
                   <CardTitle>AI Recommendations</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  <p>Run prediction from table actions to fetch latest AI insight.</p>
+                <CardContent className="space-y-3 text-sm">
+                  {lastPred && (!patient || !lastPred?.explanation?.patient_id || lastPred.explanation.patient_id === patient.id) ? (
+                    <div className="space-y-2">
+                      {typeof lastPred.risk_score === 'number' && (
+                        <p><span className="font-medium">Readmission risk:</span> {Math.round(lastPred.risk_score * 100)}%</p>
+                      )}
+                      {Array.isArray(lastPred?.high_risk_conditions) && lastPred.high_risk_conditions.length > 0 && (
+                        <p><span className="font-medium">Top drivers:</span> {lastPred.high_risk_conditions.join(', ')}</p>
+                      )}
+                      {Array.isArray(lastPred?.explanation?.readmission?.top_features) && (
+                        <div>
+                          <p className="font-medium mb-1">Readmission factors:</p>
+                          <ul className="list-disc pl-5 space-y-1">
+                            {lastPred.explanation.readmission.top_features.slice(0,5).map((t: string, i: number) => (
+                              <li key={i}>{t}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {Array.isArray(lastPred?.explanation?.severity?.top_features) && (
+                        <div>
+                          <p className="font-medium mb-1">Severity factors:</p>
+                          <ul className="list-disc pl-5 space-y-1">
+                            {lastPred.explanation.severity.top_features.slice(0,5).map((t: string, i: number) => (
+                              <li key={i}>{t}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p>Run prediction from table actions to fetch latest AI insight.</p>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -367,7 +412,7 @@ const PatientModal: React.FC<{ open: boolean; onOpenChange: (v: boolean) => void
   </Sheet>
 );
 
-const AppointmentsCard: React.FC<{ items: Array<{ id: string; patientName: string; time: string; status: string }>; onConfirm: (id: string) => void; onResched: (id: string) => void; loading?: boolean }> = ({ items, onConfirm, onResched, loading }) => (
+const AppointmentsCard: React.FC<{ items: Array<{ id: string; patientName: string; time: string; status: string }>; onConfirm: (id: string) => void; onResched: (id: string) => void; loading?: boolean; pendingId?: string | null }> = ({ items, onConfirm, onResched, loading, pendingId }) => (
   <Card>
     <CardHeader>
       <CardTitle>Upcoming Appointments</CardTitle>
@@ -375,20 +420,24 @@ const AppointmentsCard: React.FC<{ items: Array<{ id: string; patientName: strin
     </CardHeader>
     <CardContent>
       <div className="space-y-3">
-        {loading ? (
+        {loading && items.length === 0 ? (
           <div className="text-sm text-muted-foreground">Loading...</div>
         ) : items.length === 0 ? (
           <div className="text-sm text-muted-foreground">No upcoming appointments</div>
         ) : items.map((a) => (
-          <div key={a.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-            <div>
-              <p className="font-medium">{a.patientName}</p>
+          <div key={a.id} className="flex flex-wrap items-center gap-3 justify-between p-3 rounded-lg bg-muted/50">
+            <div className="min-w-0">
+              <p className="font-medium truncate max-w-[12rem] sm:max-w-[16rem]">{a.patientName}</p>
               <p className="text-xs text-muted-foreground">{new Date(a.time).toLocaleString()}</p>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant={a.status === "completed" ? "default" : "secondary"}>{a.status}</Badge>
-              <Button size="sm" variant="outline" onClick={() => onConfirm(a.id)}>Confirm</Button>
-              <Button size="sm" onClick={() => onResched(a.id)}>Reschedule</Button>
+            <Badge className="shrink-0" variant={a.status === "completed" ? "default" : "secondary"}>{a.status}</Badge>
+            <div className="flex items-center gap-2 ml-auto">
+              <Button size="sm" variant="outline" disabled={pendingId === a.id} onClick={() => onConfirm(a.id)}>
+                {pendingId === a.id ? 'Confirming...' : 'Confirm'}
+              </Button>
+              <Button size="sm" className="bg-sky-600 hover:bg-sky-700 text-white whitespace-nowrap" disabled={pendingId === a.id} onClick={() => onResched(a.id)}>
+                {pendingId === a.id ? 'Rescheduling...' : 'Reschedule'}
+              </Button>
             </div>
           </div>
         ))}
@@ -435,7 +484,11 @@ const DoctorDashboard: React.FC = () => {
   const [risk, setRisk] = useState<Risk | "all">("all");
   const [selected, setSelected] = useState<PatientRow | undefined>(undefined);
   const [modalOpen, setModalOpen] = useState(false);
-
+  const [lastPred, setLastPred] = useState<any | null>(null);
+  const [reschedOpen, setReschedOpen] = useState(false);
+  const [reschedId, setReschedId] = useState<string | null>(null);
+  const [reschedDate, setReschedDate] = useState<Date | undefined>(new Date());
+  const [reschedTime, setReschedTime] = useState<string>("09:00");
   const queryClient = useQueryClient();
 
   // Patients list
@@ -443,7 +496,14 @@ const DoctorDashboard: React.FC = () => {
     queryKey: ["assignedPatients", search],
     queryFn: () => fnGetAssignedPatients({ search: search || undefined, limit: 50, offset: 0 })
   });
-  const patients: PatientRow[] = (patientsResp?.data as PatientRow[]) || [];
+  const demoPatients: PatientRow[] = [
+    { id: "P-1001", name: "John Smith", gender: "Male", blood_group: "O+", last_visit_at: new Date().toISOString(), risk: "high" },
+    { id: "P-1002", name: "Sarah Johnson", gender: "Female", blood_group: "A-", last_visit_at: new Date(Date.now()-86400000*3).toISOString(), risk: "medium" },
+    { id: "P-1003", name: "Emily Davis", gender: "Female", blood_group: "B+", last_visit_at: new Date(Date.now()-86400000*10).toISOString(), risk: "low" },
+    { id: "P-1004", name: "Mike Wilson", gender: "Male", blood_group: "AB+", last_visit_at: new Date(Date.now()-86400000*30).toISOString(), risk: "medium" },
+  ];
+  const patientsRaw: PatientRow[] = (patientsResp?.data as PatientRow[]) || [];
+  const patients: PatientRow[] = patientsRaw.length > 0 ? patientsRaw : demoPatients;
 
   // Analytics
   const { data: analytics } = useQuery({
@@ -454,18 +514,30 @@ const DoctorDashboard: React.FC = () => {
   // Appointments
   const { data: apptsResp, isLoading: apptsLoading, refetch: refetchAppts } = useQuery({
     queryKey: ["appointments"],
-    queryFn: () => fnGetAppointments({ status: "scheduled", limit: 10, offset: 0 })
+    queryFn: () => fnGetAppointments({ status: "scheduled", limit: 10, offset: 0 }),
+    staleTime: 60_000, // 1 min: avoid frequent refetches
+    gcTime: 300_000,   // keep cached data for 5 min
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    retry: 1,
   });
-  const apptItems: Array<{ id: string; patientName: string; time: string; status: string }> = ((apptsResp?.data as AppointmentRow[]) || []).map(a => ({
+  const apptFromApi: Array<{ id: string; patientName: string; time: string; status: string }> = ((apptsResp?.data as AppointmentRow[]) || []).map(a => ({
     id: a.id,
     patientName: a.patient_id, // could be joined in future
     time: a.scheduled_at,
     status: a.status,
   }));
+  const demoAppts: Array<{ id: string; patientName: string; time: string; status: string }> = [
+    { id: "A-2001", patientName: "John Smith", time: new Date(Date.now()+3600000).toISOString(), status: "scheduled" },
+    { id: "A-2002", patientName: "Emily Davis", time: new Date(Date.now()+7200000).toISOString(), status: "scheduled" },
+  ];
+  const apptItems = apptFromApi.length > 0 ? apptFromApi : demoAppts;
+  const usingDemoAppts = apptFromApi.length === 0;
 
+  const derivedRisk = patients.reduce((acc, p) => { if (p.risk) acc[p.risk] += 1; return acc; }, { low: 0, medium: 0, high: 0 });
   const stats = {
     totalPatients: analytics?.totals?.patients ?? patients.length,
-    highRisk: analytics?.risk_distribution?.high ?? 0,
+    highRisk: analytics?.risk_distribution?.high ?? derivedRisk.high,
     upcoming: analytics?.totals?.appointments_pending ?? apptItems.length,
     notifications: mockAlerts.length,
   };
@@ -475,10 +547,19 @@ const DoctorDashboard: React.FC = () => {
     setModalOpen(true);
   };
 
+  const [pendingId, setPendingId] = useState<string | null>(null);
   const predictMutation = useMutation({
     mutationFn: (patient_id: string) => fnTriggerPrediction(patient_id),
-    onSuccess: () => {
-      toast("Prediction triggered", { description: "Latest risk was requested from ML service." });
+    onSuccess: (data: any) => {
+      setLastPred(data);
+      const pct = typeof data?.risk_score === 'number' ? Math.round(data.risk_score * 100) : undefined;
+      toast("Prediction complete", {
+        description: pct !== undefined ? `Readmission risk: ${pct}%` : "Received ML insight.",
+      });
+      // Optionally open the AI tab for the selected patient
+      if (selected && (data?.explanation?.patient_id ? selected.id === data.explanation.patient_id : true)) {
+        setModalOpen(true);
+      }
       queryClient.invalidateQueries({ queryKey: ["analytics"] });
     },
     onError: (e: any) => toast("Prediction failed", { description: String(e?.message || e) })
@@ -487,21 +568,91 @@ const DoctorDashboard: React.FC = () => {
   const updateAppt = useMutation({
     mutationFn: (vars: { id: string; status?: string }) => fnUpdateAppointment(vars),
     onSuccess: () => { refetchAppts(); toast("Appointment updated"); },
-    onError: (e: any) => toast("Update failed", { description: String(e?.message || e) })
+    onError: (e: any) => toast("Update failed", { description: String(e?.message || e) }),
+    onSettled: () => setPendingId(null),
   });
 
-  const confirmAppt = (id: string) => updateAppt.mutate({ id, status: "completed" });
-  const reschedAppt = (id: string) => updateAppt.mutate({ id, status: "scheduled" });
+  const confirmAppt = (id: string) => {
+    if (usingDemoAppts) {
+      toast("Appointment confirmed (demo)");
+      toast("Doctor notified (demo)", { description: "A task has been assigned to follow-up." });
+      return;
+    }
+    setPendingId(id);
+    updateAppt.mutate({ id, status: "completed" });
+    toast("Doctor notified", { description: "A follow-up task has been assigned." });
+  };
+
+  const openReschedule = (id: string) => {
+    setReschedId(id);
+    setReschedOpen(true);
+  };
+
+  const submitReschedule = () => {
+    if (!reschedId || !reschedDate || !reschedTime) return;
+    const [hh, mm] = reschedTime.split(":").map(Number);
+    const d = new Date(reschedDate);
+    d.setHours(hh || 0, mm || 0, 0, 0);
+    const iso = d.toISOString();
+
+    if (usingDemoAppts) {
+      toast("Rescheduled (demo)", { description: new Date(iso).toLocaleString() });
+      setReschedOpen(false);
+      setReschedId(null);
+      return;
+    }
+    setPendingId(reschedId);
+    updateAppt.mutate({ id: reschedId, status: "scheduled", ...( { scheduled_at: iso } as any) });
+    setReschedOpen(false);
+    setReschedId(null);
+  };
 
   const onPredict = (p: PatientRow) => predictMutation.mutate(p.id);
+
+  const [activeSection, setActiveSection] = useState("overview");
+  const navLockUntil = useRef<number | null>(null);
+
+  // Scroll spy: keep sidebar highlight in sync with right-side sections
+  useEffect(() => {
+    const ids = ["overview", "risk", "appointments", "patients", "reports"];
+    const elements = ids.map((id) => document.getElementById(id)).filter(Boolean) as HTMLElement[];
+    if (elements.length === 0) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // Ignore observer while a manual navigation is in progress
+        if (navLockUntil.current && Date.now() < navLockUntil.current) return;
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => b.boundingClientRect.top - a.boundingClientRect.top); // closest to top wins
+        if (visible[0]?.target?.id) setActiveSection(visible[0].target.id);
+      },
+      { rootMargin: "-30% 0px -60% 0px", threshold: [0.1] }
+    );
+    elements.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <NavbarBar onSearch={setSearch} notifications={stats.notifications} />
       <div className="flex">
-        <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} active="Overview" />
+        <Sidebar
+          collapsed={collapsed}
+          setCollapsed={setCollapsed}
+          activeId={activeSection}
+          onNavigate={(id) => {
+            setActiveSection(id);
+            // Lock observer for a short period so the highlight doesn't jump
+            navLockUntil.current = Date.now() + 800;
+            const el = document.getElementById(id);
+            el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Safety unlock in case of short pages
+            window.setTimeout(() => { navLockUntil.current = null; }, 900);
+          }}
+        />
         <main className="flex-1 p-4 md:p-6 lg:p-8">
           {/* Welcome Banner */}
+          <div id="overview" className="scroll-mt-20"></div>
           <Card className="mb-6">
             <CardContent className="py-6 flex items-center justify-between">
               <div>
@@ -509,8 +660,7 @@ const DoctorDashboard: React.FC = () => {
                 <p className="text-sm text-muted-foreground">Here are today’s patient insights and actions</p>
               </div>
               <div className="hidden md:flex items-center gap-3">
-                <Button variant="outline" className="gap-2"><Home className="h-4 w-4" /> Home</Button>
-                <Button className="bg-sky-600 hover:bg-sky-700 text-white gap-2"><Activity className="h-4 w-4" /> New Analysis</Button>
+                <Link to="/"><Button variant="outline" className="gap-2"><Home className="h-4 w-4" /> Home</Button></Link>
               </div>
             </CardContent>
           </Card>
@@ -521,37 +671,66 @@ const DoctorDashboard: React.FC = () => {
           {/* Charts + Appointments */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
             <div className="lg:col-span-2">
+              <div id="risk" className="scroll-mt-24"></div>
               <RiskChart distribution={{
-                low: analytics?.risk_distribution?.low ?? 0,
-                medium: analytics?.risk_distribution?.medium ?? 0,
-                high: analytics?.risk_distribution?.high ?? 0,
+                low: analytics?.risk_distribution?.low ?? derivedRisk.low,
+                medium: analytics?.risk_distribution?.medium ?? derivedRisk.medium,
+                high: analytics?.risk_distribution?.high ?? derivedRisk.high,
               }} />
             </div>
-            <AppointmentsCard items={apptItems} onConfirm={confirmAppt} onResched={reschedAppt} loading={apptsLoading} />
+            <div id="appointments" className="scroll-mt-24">
+              <AppointmentsCard items={apptItems} onConfirm={confirmAppt} onResched={openReschedule} loading={apptsLoading && apptFromApi.length === 0} pendingId={pendingId} />
+            </div>
           </div>
 
           {/* Patients + Alerts */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
             <div className="lg:col-span-2">
+              <div id="patients" className="scroll-mt-24"></div>
               <PatientTable
                 patients={patients}
                 onView={handleView}
                 onPredict={onPredict}
-                loading={patientsLoading}
+                loading={patientsLoading && patients.length === 0}
                 query={search}
                 onQuery={(q) => { setSearch(q); refetchPatients(); }}
                 riskFilter={risk}
                 onRisk={setRisk}
               />
             </div>
-            <AlertsPanel />
+            <div id="reports" className="scroll-mt-24">
+              <AlertsPanel />
+            </div>
           </div>
 
           <FooterBar />
         </main>
       </div>
 
-      <PatientModal open={modalOpen} onOpenChange={setModalOpen} patient={selected} />
+      <PatientModal open={modalOpen} onOpenChange={setModalOpen} patient={selected} lastPred={lastPred} />
+
+      {/* Reschedule Dialog */}
+      <Dialog open={reschedOpen} onOpenChange={setReschedOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reschedule appointment</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="mb-2 block">Pick a date</Label>
+              <Calendar mode="single" selected={reschedDate} onSelect={setReschedDate} className="rounded-md border" />
+            </div>
+            <div>
+              <Label htmlFor="resched-time" className="mb-2 block">Time</Label>
+              <Input id="resched-time" type="time" value={reschedTime} onChange={(e) => setReschedTime(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReschedOpen(false)}>Cancel</Button>
+            <Button onClick={submitReschedule} className="bg-sky-600 hover:bg-sky-700 text-white">Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

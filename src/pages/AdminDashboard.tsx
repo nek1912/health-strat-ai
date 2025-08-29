@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -29,10 +29,10 @@ import {
   ChevronLeft,
   ChevronRight,
   FileDown,
+  Home,
   LayoutDashboard,
   ListChecks,
   Menu,
-  Settings,
   UserCog,
   Users,
   Stethoscope,
@@ -90,7 +90,6 @@ const navItems = [
   { label: 'Resources', icon: BedDouble, anchor: '#resources' },
   { label: 'AI Analytics', icon: Cpu, anchor: '#analytics' },
   { label: 'Reports', icon: ListChecks, anchor: '#reports' },
-  { label: 'Settings', icon: Settings, anchor: '#settings' },
 ];
 
 const NavbarBar: React.FC<{ onSearch: (q: string) => void; notifications: number }> = ({ onSearch, notifications }) => (
@@ -126,7 +125,6 @@ const NavbarBar: React.FC<{ onSearch: (q: string) => void; notifications: number
               </SheetHeader>
               <div className="mt-4 space-y-2">
                 <Button variant="ghost" className="w-full justify-start">Profile</Button>
-                <Button variant="ghost" className="w-full justify-start">Settings</Button>
                 <Button variant="destructive" className="w-full justify-start">Logout</Button>
               </div>
             </SheetContent>
@@ -163,6 +161,160 @@ const StatsGrid: React.FC = () => (
     <Card className="hover:shadow-lg transition-all"><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm">Occupancy</CardTitle><BedDouble className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><div className="text-2xl font-bold">78%</div><p className="text-xs text-muted-foreground">ICU 65%</p></CardContent></Card>
   </div>
 );
+
+const OperationalOverview: React.FC = () => {
+  const kpiTrend = [
+    { t: 'Mon', v: 72 },
+    { t: 'Tue', v: 74 },
+    { t: 'Wed', v: 71 },
+    { t: 'Thu', v: 76 },
+    { t: 'Fri', v: 78 },
+    { t: 'Sat', v: 75 },
+    { t: 'Sun', v: 77 },
+  ];
+
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [schedOpen, setSchedOpen] = useState(false);
+  const [inviteName, setInviteName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("doctor");
+  const [schedTitle, setSchedTitle] = useState("");
+  const [schedDate, setSchedDate] = useState("");
+  const [schedTime, setSchedTime] = useState("");
+
+  const handleInvite = () => {
+    // TODO: wire to backend invite endpoint
+    // eslint-disable-next-line no-alert
+    alert(`Invite sent to ${inviteEmail} as ${inviteRole}`);
+    setInviteOpen(false);
+    setInviteName(""); setInviteEmail(""); setInviteRole("doctor");
+  };
+
+  const handleSchedule = () => {
+    // TODO: wire to scheduling endpoint
+    // eslint-disable-next-line no-alert
+    alert(`Scheduled: ${schedTitle} on ${schedDate} at ${schedTime}`);
+    setSchedOpen(false);
+    setSchedTitle(""); setSchedDate(""); setSchedTime("");
+  };
+
+  const exportMonthlyReport = () => {
+    // Export patientGrowth as a simple monthly report
+    const headers = ['Month','Patients'];
+    const rows = patientGrowth.map(r => [r.month, String(r.patients)]);
+    const csv = [headers.join(','), ...rows.map(r=>r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'monthly_report.csv'; a.click(); URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <Card className="lg:col-span-2">
+        <CardHeader>
+          <CardTitle>Operational Overview</CardTitle>
+          <CardDescription>Live KPIs to monitor hospital performance</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-3 rounded-lg border">
+              <div className="text-xs text-muted-foreground">Avg. Wait Time</div>
+              <div className="text-xl font-semibold">18m</div>
+              <div className="text-[11px] text-green-600">-2m vs last week</div>
+            </div>
+            <div className="p-3 rounded-lg border">
+              <div className="text-xs text-muted-foreground">Readmission Rate</div>
+              <div className="text-xl font-semibold">7.8%</div>
+              <div className="text-[11px] text-green-600">-0.4% MoM</div>
+            </div>
+            <div className="p-3 rounded-lg border">
+              <div className="text-xs text-muted-foreground">Bed Utilization</div>
+              <div className="text-xl font-semibold">78%</div>
+              <div className="text-[11px] text-amber-600">Target 80%</div>
+            </div>
+            <div className="p-3 rounded-lg border">
+              <div className="text-xs text-muted-foreground">Revenue (MTD)</div>
+              <div className="text-xl font-semibold">$1.42M</div>
+              <div className="text-[11px] text-green-600">+5.1% MoM</div>
+            </div>
+          </div>
+          <div className="mt-6 h-28">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={kpiTrend}>
+                <XAxis dataKey="t" hide />
+                <YAxis hide domain={[65, 80]} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <RechartsTooltip />
+                <Line type="monotone" dataKey="v" stroke="#6366f1" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Actions</CardTitle>
+          <CardDescription>Common tasks for admins</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <Link to="/doctor"><Button className="w-full justify-start gap-2"><UserCog className="h-4 w-4" /> Doctor View</Button></Link>
+          <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="w-full justify-start gap-2"><Users className="h-4 w-4" /> Invite Staff</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Invite Staff Member</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-3 py-2">
+                <Input placeholder="Full name" value={inviteName} onChange={e=>setInviteName(e.target.value)} />
+                <Input placeholder="Email" type="email" value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} />
+                <div className="grid gap-1 text-sm">
+                  <label className="text-muted-foreground">Role</label>
+                  <select className="h-9 rounded-md border bg-background px-3" value={inviteRole} onChange={e=>setInviteRole(e.target.value)}>
+                    <option value="doctor">Doctor</option>
+                    <option value="nurse">Nurse</option>
+                    <option value="staff">Staff</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={()=>setInviteOpen(false)}>Cancel</Button>
+                <Button onClick={handleInvite} disabled={!inviteEmail || !inviteName}>Send Invite</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={schedOpen} onOpenChange={setSchedOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="w-full justify-start gap-2"><CalendarDays className="h-4 w-4" /> Manage Schedule</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create Schedule Entry</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-3 py-2">
+                <Input placeholder="Title (e.g., Staff meeting)" value={schedTitle} onChange={e=>setSchedTitle(e.target.value)} />
+                <div className="grid grid-cols-2 gap-3">
+                  <Input type="date" value={schedDate} onChange={e=>setSchedDate(e.target.value)} />
+                  <Input type="time" value={schedTime} onChange={e=>setSchedTime(e.target.value)} />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={()=>setSchedOpen(false)}>Cancel</Button>
+                <Button onClick={handleSchedule} disabled={!schedTitle || !schedDate || !schedTime}>Save</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Button variant="outline" className="w-full justify-start gap-2" onClick={exportMonthlyReport}><FileDown className="h-4 w-4" /> Export Monthly Report</Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
 
 const OverviewCharts: React.FC = () => (
   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -314,7 +466,8 @@ const PatientManagement: React.FC = () => {
   const [patients, setPatients] = useState<Patient[]>(mockPatients);
   const [query, setQuery] = useState("");
   const filtered = useMemo(() => patients.filter(p => [p.name, p.condition, p.id].some(v => v.toLowerCase().includes(query.toLowerCase()))), [patients, query]);
-  const toggleFlag = (id: string) => setPatients(prev => prev.map(p => p.id === id ? { ...p, risk: p.risk === 'high' ? 'medium' : 'high' } : p));
+  const setRisk = (id: string, level: 'low' | 'medium' | 'high') =>
+    setPatients(prev => prev.map(p => p.id === id ? { ...p, risk: level } : p));
 
   return (
     <section id="patients" className="space-y-4">
@@ -329,7 +482,7 @@ const PatientManagement: React.FC = () => {
               <TableHead>Name</TableHead>
               <TableHead>Condition</TableHead>
               <TableHead>Risk</TableHead>
-              <TableHead className="text-right">Action</TableHead>
+              <TableHead className="text-right">Set Risk</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -341,7 +494,15 @@ const PatientManagement: React.FC = () => {
                   <Badge variant={p.risk === 'high' ? 'destructive' : p.risk === 'medium' ? 'secondary' : 'default'}>{p.risk.toUpperCase()}</Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button size="sm" onClick={()=>toggleFlag(p.id)}>{p.risk === 'high' ? 'Unflag' : 'Flag High Risk'}</Button>
+                  <select
+                    className="h-9 rounded-md border bg-background px-3 text-sm"
+                    value={p.risk}
+                    onChange={(e)=>setRisk(p.id, e.target.value as 'low'|'medium'|'high')}
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
                 </TableCell>
               </TableRow>
             ))}
@@ -411,7 +572,7 @@ const ReportsPanel: React.FC = () => {
 
 const FooterBar: React.FC = () => (
   <footer className="mt-10 py-6 border-t text-xs text-muted-foreground flex items-center justify-between">
-    <span>© {new Date().getFullYear()} MediSense Hospital</span>
+    <span> {new Date().getFullYear()} MediSense Hospital</span>
     <div className="flex items-center gap-4">
       <a className="hover:underline" href="#">Privacy Policy</a>
       <a className="hover:underline" href="#">Terms</a>
@@ -423,6 +584,8 @@ const AdminDashboard: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [search, setSearch] = useState("");
   const [active, setActive] = useState('Dashboard');
+  const location = useLocation();
+  const isOverview = location.pathname.endsWith('/overview');
 
   const notifications = 4;
 
@@ -441,12 +604,52 @@ const AdminDashboard: React.FC = () => {
                   <p className="text-sm text-muted-foreground">Control center for doctors, patients, resources, and AI analytics</p>
                 </div>
                 <div className="hidden md:flex items-center gap-3">
-                  <Button variant="outline" className="gap-2"><LayoutDashboard className="h-4 w-4" /> Overview</Button>
-                  <Link to="/doctor"><Button className="gap-2"><UserCog className="h-4 w-4" /> Doctor View</Button></Link>
+                  <Link to="/">
+                    <Button variant="outline" className="gap-2"><Home className="h-4 w-4" /> Home</Button>
+                  </Link>
+                  <Link to="/doctor">
+                    <Button className="gap-2"><UserCog className="h-4 w-4" /> Doctor View</Button>
+                  </Link>
                 </div>
               </CardContent>
             </Card>
             <StatsGrid />
+            <OperationalOverview />
+            {isOverview && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <Card className="lg:col-span-2">
+                  <CardHeader>
+                    <CardTitle>Capacity Forecast</CardTitle>
+                    <CardDescription>Projected occupancy for next 7 days</CardDescription>
+                  </CardHeader>
+                  <CardContent className="h-52">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={[{d:'D+1',o:79},{d:'D+2',o:80},{d:'D+3',o:82},{d:'D+4',o:81},{d:'D+5',o:83},{d:'D+6',o:82},{d:'D+7',o:84}]}> 
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="d" />
+                        <YAxis domain={[70, 90]} />
+                        <RechartsTooltip />
+                        <Line type="monotone" dataKey="o" stroke="#ef4444" strokeWidth={2} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>SLA Compliance</CardTitle>
+                    <CardDescription>Response times last 24h</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3 text-sm">
+                      <div className="flex items-center justify-between"><span>ED triage &lt; 10m</span><Badge>92%</Badge></div>
+                      <div className="flex items-center justify-between"><span>Inpatient admit &lt; 60m</span><Badge variant="secondary">88%</Badge></div>
+                      <div className="flex items-center justify-between"><span>Discharge paperwork &lt; 30m</span><Badge>95%</Badge></div>
+                      <div className="flex items-center justify-between"><span>Critical lab turnaround &lt; 1h</span><Badge variant="secondary">90%</Badge></div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
             <OverviewCharts />
           </section>
 
@@ -461,6 +664,7 @@ const AdminDashboard: React.FC = () => {
         </main>
       </div>
     </div>
+
   );
 };
 
