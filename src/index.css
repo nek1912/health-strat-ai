@@ -129,7 +129,7 @@
   }
 
   .card-feature {
-    @apply bg-card rounded-2xl p-8 shadow-soft hover:shadow-medium transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-1 border border-border/50 group;
+    @apply bg-card rounded-2xl p-8 shadow-soft hover:shadow-medium transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-1 border border-border/50;
   }
 
   /* Healthcare Sections */

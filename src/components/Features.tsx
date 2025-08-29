@@ -124,7 +124,7 @@ const Features = () => {
           {features.map((feature, index) => (
             <div 
               key={index}
-              className="card-feature animate-fade-in"
+              className="card-feature group animate-fade-in"
               style={{ animationDelay: `${index * 0.1}s` }}
             >
               <div className={`${feature.bgColor} ${feature.color} w-12 h-12 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}>
