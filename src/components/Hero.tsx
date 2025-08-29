@@ -21,8 +21,8 @@ const Hero = () => {
                 <span>AI-Powered Healthcare Analytics</span>
               </div>
               
-              <h1 className="heading-primary">
-                <span className="text-gradient">AI-Powered Healthcare</span>
+              <h1 className="text-4xl lg:text-6xl font-bold leading-tight tracking-tight">
+                <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">AI-Powered Healthcare</span>
                 <br />
                 Risk & Outcome Prediction
               </h1>
@@ -37,7 +37,8 @@ const Hero = () => {
             <div className="flex flex-col sm:flex-row gap-4">
               <Button 
                 onClick={() => scrollToSection('#roles')}
-                className="btn-hero group"
+                size="lg"
+                className="bg-gradient-to-r from-primary to-secondary text-white px-8 py-4 text-lg font-bold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-1 group"
               >
                 Get Started
                 <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
@@ -45,8 +46,9 @@ const Hero = () => {
               
               <Button 
                 variant="outline"
+                size="lg"
                 onClick={() => scrollToSection('#features')}
-                className="btn-outline group"
+                className="border-2 border-primary text-primary hover:bg-primary hover:text-white px-8 py-4 text-lg font-semibold transition-all duration-300 transform hover:scale-[1.02] group"
               >
                 <Play className="mr-2 h-5 w-5" />
                 Learn More

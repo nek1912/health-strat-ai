@@ -24,10 +24,10 @@ const Navbar = () => {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <div className="flex items-center space-x-2">
-            <div className="bg-gradient-primary p-2 rounded-xl">
+            <div className="bg-gradient-to-r from-primary to-primary-dark p-2 rounded-xl">
               <Activity className="h-6 w-6 text-white" />
             </div>
-            <span className="font-bold text-xl text-gradient">HealthAI</span>
+            <span className="font-bold text-xl bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">HealthAI</span>
           </div>
 
           {/* Desktop Navigation */}
@@ -48,7 +48,7 @@ const Navbar = () => {
             <Button variant="ghost" className="font-semibold">
               Login
             </Button>
-            <Button className="btn-primary">
+            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-2 font-semibold">
               Register
             </Button>
           </div>
@@ -79,7 +79,7 @@ const Navbar = () => {
                 <Button variant="ghost" className="w-full justify-center">
                   Login
                 </Button>
-                <Button className="w-full btn-primary">
+                <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
                   Register
                 </Button>
               </div>

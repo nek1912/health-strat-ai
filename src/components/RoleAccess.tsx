@@ -114,7 +114,7 @@ const RoleAccess = () => {
               {/* CTA Button */}
               <Button 
                 onClick={() => handleRoleAccess(role.route)}
-                className="w-full btn-primary group-hover:shadow-colored transition-all duration-300"
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-3 font-semibold transition-all duration-300"
               >
                 Access Portal
                 <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
